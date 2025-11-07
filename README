@@ -1,0 +1,16 @@
+Dataset Explanation
+
+price : property price
+bedrooms : nº of bedrooms
+bathrooms : nº of bathrooms
+sqft_living : sqft of the house living
+sqft_loot: sqft of the terrain
+floors: nº of floors
+waterfront: it has or not views to water (river, sea...)
+view : quality of the views (0 to 4)
+condition : general condition of the house (1 to 5)
+sqft_above: sqft of the surface above the floor
+yr_build : year built
+yr_renovated: year of renovation (0 = no renovation)
+city: city
+statezip: statezip

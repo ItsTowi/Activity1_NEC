@@ -5,6 +5,7 @@ bedrooms : nº of bedrooms
 bathrooms : nº of bathrooms
 sqft_living : sqft of the house living
 sqft_loot: sqft of the terrain
+sqft_basement: sqft of the basement
 floors: nº of floors
 waterfront: it has or not views to water (river, sea...)
 view : quality of the views (0 to 4)

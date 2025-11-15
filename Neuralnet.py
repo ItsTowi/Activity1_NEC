@@ -52,9 +52,35 @@ class NeuralNet:
         self.lr = lr
         self.momentum = momentum
         self.perc_validation = perc_validation
-                                
         
-    
+        self.train_errors = []
+        self.val_errors = []
+                                
+    def _activation(self, x):
+        if self.fact == 'sigmoid':
+            return 1 / (1 + np.exp(-x))
+        elif self.fact == 'tanh':
+            return np.tanh(x)
+        elif self.fact == 'relu':
+            return np.maximum(0, x)
+        elif self.fact == 'linear':
+            return x
+        else:
+            raise ValueError(f"Function {self.fact} not supported")
+
+    def _activation_derivative(self, x):
+        if self.fact == 'sigmoid':
+            s = 1 / (1 + np.exp(-x))
+            return s * (1 - s)
+        elif self.fact == 'tanh':
+            return 1 - np.tanh(x)**2
+        elif self.fact == 'relu':
+            return (x > 0).astype(float)
+        elif self.fact == 'linear':
+            return np.ones_like(x)
+        else:
+            raise ValueError(f"Función {self.fact} no soportada")
+
     def initialize_w_theta(self):
         for L in range(1, self.L):
             self.w[L] = np.random.randn(self.n[L], self.n[L-1]) * 0.5
@@ -76,75 +102,141 @@ class NeuralNet:
             self.h[L][i] += self.w[L][i, j] * self.xi[L-1][j]
             
         self.h[L][i] -= self.theta[L][i]
-            
-        return (1 / (1 + np.exp(-self.h[L][i])))
+         
+        return self._activation(self.h[L][i])
+        #return (1 / (1 + np.exp(-self.h[L][i])))
     
     def error_back_propagation(self, out_x, y):
         
         L = self.L
-        self.delta[L - 1] = (out_x - y) * self.xi[L - 1] * (1 - self.xi[L - 1])
-        print(self.delta[L - 1])
+        self.delta[L - 1] = (out_x - y) * self._activation_derivative(self.h[L - 1])
+        #print(self.delta[L - 1])
         
         for l in range(self.L - 2, 0, -1):
             for j in range(0, self.n[l]):
                 sum_delta = 0
                 for i in range(self.n[l+1]):
                     sum_delta += self.delta[l+1][i] * self.w[l+1][i,j]
-                self.delta[l][j] = self.xi[l][j] * (1 - self.xi[l][j]) * sum_delta
+                self.delta[l][j] = self._activation_derivative(self.h[l][j]) * sum_delta
                  
-    
     def update_values(self):
         
         for l in range(1, self.L):
             for i in range(0, self.n[l]):
-                
                 self.d_theta[l][i]= (self.lr * self.delta[l][i]) + (self.momentum * self.d_theta_prev[l][i])
                 self.theta[l][i] = self.theta[l][i] + self.d_theta[l][i]
                 
-                print(f"Layer {l}, Neuron {i}:")
-                print(f"  delta: {self.delta[l][i]:.6f}")
-                print(f"  d_theta: {self.d_theta[l][i]:.6f}")
-                print(f"  theta after: {self.theta[l][i]:.6f}")
-            
                 for j in range(0, self.n[l - 1]):
-                    
-                    old_w = self.w[l][i,j]
                     self.d_w[l][i,j] = -self.lr * self.delta[l][i] * self.xi[l-1][j] + self.momentum * self.d_w_prev[l][i,j]
                     self.w[l][i,j] += self.d_w[l][i,j]
-                    
-                    print(f"    Weight w[{l}][{i},{j}]: {old_w:.6f} -> {self.w[l][i,j]:.6f} (change: {self.d_w[l][i,j]:.6f})")
-                
+
         self.d_w_prev = [dw.copy() for dw in self.d_w]
         self.d_theta_prev = [dt.copy() for dt in self.d_theta]
-        print("="*50)
 
+    def shuffle_data(self, X, y):
+        indices = np.random.permutation(X.shape[0])
+        return X[indices], y[indices]
+
+    def data_division(self, X, y):
+        n_total = X.shape[0]
+        n_test = int(0.20 * n_total)
+
+        X_test = X[-n_test:]
+        y_test = y[-n_test:]
+
+        X_train_val = X[:-n_test]
+        y_train_val = y[:-n_test]
         
-                   
+        n_train_val = X_train_val.shape[0]
+        n_val = int(self.perc_validation * n_train_val)
+
+        X_val = X_train_val[:n_val]
+        y_val = y_train_val[:n_val]
+
+        X_train = X_train_val[n_val:]
+        y_train = y_train_val[n_val:]
+        
+        self.X_train, self.y_train = X_train, y_train
+        self.X_val,   self.y_val   = X_val,   y_val
+        self.X_test,  self.y_test  = X_test,  y_test
+
+        print("Shuffle y splits realizados:")
+        print(f"  Train: {X_train.shape[0]} patrones")
+        print(f"  Val:   {X_val.shape[0]} patrones")
+        print(f"  Test:  {X_test.shape[0]} patrones")
+                     
     def fit(self,X,y):
         self.initialize_w_theta()
+        X, y = self.shuffle_data(X, y)
+        self.data_division(X, y)
+        num_train = self.X_train.shape[0]
         
         for epoch in range(self.epochs):
             
             print(f"EPOCH {epoch}")
-            for pat in range(X.shape[0]):
+            
+            for _ in range(num_train):
+                idx = np.random.randint(0, num_train)   # patrón aleatorio
+                #print(f"Pattern idx: {idx}")
                 
-                print("Pattern")
+                #print("Pattern")
                 #Choose a random pattern (xu zu) of training set
-                output = self.feed_forward(X[pat])
-                print(f"Output {output}")
+                output = self.feed_forward(self.X_train[idx])
+                #print(f"Output {output}")
                 
                 #Back-propagate the error for this pattern
-                self.error_back_propagation(output, y[pat])
+                self.error_back_propagation(output, self.y_train[idx])
                 
                 #Update the weights and threseholds
                 self.update_values()
                 
             #Feed-forward all training patterns
+            train_outputs = []
+            for pat in range(self.X_train.shape[0]):
+                out = self.feed_forward(self.X_train[pat])
+                train_outputs.append(out)
+
+            train_outputs = np.array(train_outputs).reshape(-1, 1)
+            train_error = np.mean((train_outputs - self.y_train)**2)
+            #print(f"Train MSE: {train_error:.6f}")
+            self.train_errors.append(train_error)
+            
             #Feed-forward all validation paterns
-        #Feed-forward all test partterns
-        #Descale and evaluate
+            if self.X_val.shape[0] > 0:
+                val_outputs = []
+                for pat in range(self.X_val.shape[0]):
+                    out = self.feed_forward(self.X_val[pat])
+                    val_outputs.append(out)
+
+                val_outputs = np.array(val_outputs).reshape(-1, 1)
+                val_error = np.mean((val_outputs - self.y_val)**2)
+                #print(f"Val MSE:   {val_error:.6f}")
+                self.val_errors.append(val_error)
+
+            else:
+                #print("Val MSE:   (sin validación)") 
+                self.val_errors.append(None)
+    
+        # Feed-forward all test patterns
+        test_outputs = []
+        for pat in range(self.X_test.shape[0]):
+            out = self.feed_forward(self.X_test[pat])
+            test_outputs.append(out)
+
+        test_outputs = np.array(test_outputs).reshape(-1, 1)
+
+        # Descale and evaluate
+        self.test_outputs = test_outputs
+        self.test_mse = np.mean((test_outputs - self.y_test)**2)
+
+        print("\n===== RESULTADOS TEST =====")
+        print(f"Test MSE: {self.test_mse:.6f}")
         
     def predict(self, X):
+        
+        if not isinstance(X, np.ndarray):
+            X = np.array(X, dtype=float)
         return np.array([self.feed_forward(x) for x in X])
-    def loss_epochs():
-        return 0
+    
+    def loss_epochs(self):
+        return np.array(self.train_errors), np.array(self.val_errors)

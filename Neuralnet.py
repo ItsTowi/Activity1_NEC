@@ -1,4 +1,5 @@
 import numpy as np
+import warnings
 
 class NeuralNet:
     def __init__(self, layers, epochs, lr, momentum, function, perc_validation):
@@ -70,10 +71,11 @@ class NeuralNet:
 
     def _activation_derivative(self, x):
         if self.fact == 'sigmoid':
-            s = 1 / (1 + np.exp(-x))
+            s = self._activation(x)
             return s * (1 - s)
         elif self.fact == 'tanh':
-            return 1 - np.tanh(x)**2
+            s = self._activation(x)
+            return 1 - s**2
         elif self.fact == 'relu':
             return (x > 0).astype(float)
         elif self.fact == 'linear':
@@ -83,9 +85,17 @@ class NeuralNet:
 
     def initialize_w_theta(self):
         for L in range(1, self.L):
-            self.w[L] = np.random.randn(self.n[L], self.n[L-1]) * 0.5
-        for L in range(1, self.L):
-            self.theta[L] = np.random.randn(self.n[L]) * 0.5
+            n_in = self.n[L - 1]  
+            n_out = self.n[L]    
+            
+            # Fórmula de Xavier/Glorot para inicialización uniforme
+            limit = np.sqrt(6.0 / (n_in + n_out))
+            
+            # Inicialización de Pesos (w)
+            self.w[L] = np.random.uniform(low=-limit, high=limit, size=(n_out, n_in))
+            
+            # Inicialización de Umbrales (theta) a cero (práctica común y segura)
+            self.theta[L] = np.zeros(n_out)
     
     def feed_forward(self, X):
         self.xi[0] = X
@@ -94,7 +104,7 @@ class NeuralNet:
             for i in range (0, num_neurons):
                 self.xi[L][i] = self.activation_function(i, L)
                 
-        return self.xi[L]
+        return self.xi[self.L - 1]  #Xi[L] (1 neuron)
     
     def activation_function(self, i, L):
         self.h[L][i] = 0
@@ -109,23 +119,24 @@ class NeuralNet:
     def error_back_propagation(self, out_x, y):
         
         L = self.L
-        self.delta[L - 1] = (out_x - y) * self._activation_derivative(self.h[L - 1])
+        self.delta[L - 1] = (out_x - y) * self._activation_derivative(self.h[L - 1]) #Last layer L
         #print(self.delta[L - 1])
         
+        #From layer l-1 to 2.
         for l in range(self.L - 2, 0, -1):
-            for j in range(0, self.n[l]):
+            #From 0 to l-1
+            for j in range(self.n[l]):
                 sum_delta = 0
+                #From 0 to l
                 for i in range(self.n[l+1]):
                     sum_delta += self.delta[l+1][i] * self.w[l+1][i,j]
                 self.delta[l][j] = self._activation_derivative(self.h[l][j]) * sum_delta
                  
     def update_values(self):
-        
         for l in range(1, self.L):
             for i in range(0, self.n[l]):
                 self.d_theta[l][i]= (self.lr * self.delta[l][i]) + (self.momentum * self.d_theta_prev[l][i])
-                self.theta[l][i] = self.theta[l][i] + self.d_theta[l][i]
-                
+                self.theta[l][i] += self.d_theta[l][i]
                 for j in range(0, self.n[l - 1]):
                     self.d_w[l][i,j] = -self.lr * self.delta[l][i] * self.xi[l-1][j] + self.momentum * self.d_w_prev[l][i,j]
                     self.w[l][i,j] += self.d_w[l][i,j]
@@ -164,17 +175,34 @@ class NeuralNet:
         print(f"  Train: {X_train.shape[0]} patrones")
         print(f"  Val:   {X_val.shape[0]} patrones")
         print(f"  Test:  {X_test.shape[0]} patrones")
-                     
+    
+    def calculate_quadratic_error(self, X_set, y_set):
+        total_error = 0.0
+        num_patterns = X_set.shape[0]
+
+        for mu in range(num_patterns):
+            x_mu = X_set[mu]
+            z_mu = y_set[mu]
+
+            # 1. Feed-forward: Obtener la predicción o(x^mu)
+            o_mu = self.feed_forward(x_mu)
+
+            squared_difference = (o_mu - z_mu)**2
+            pattern_error_sum = np.sum(squared_difference) 
+            
+            total_error += pattern_error_sum
+
+        return 0.5 * total_error
+    
     def fit(self,X,y):
+        
         self.initialize_w_theta()
         X, y = self.shuffle_data(X, y)
         self.data_division(X, y)
         num_train = self.X_train.shape[0]
+        val_err = np.nan
         
         for epoch in range(self.epochs):
-            
-            print(f"EPOCH {epoch}")
-            
             for _ in range(num_train):
                 idx = np.random.randint(0, num_train)   # patrón aleatorio
                 #print(f"Pattern idx: {idx}")
@@ -189,54 +217,63 @@ class NeuralNet:
                 
                 #Update the weights and threseholds
                 self.update_values()
-                
-            #Feed-forward all training patterns
-            train_outputs = []
-            for pat in range(self.X_train.shape[0]):
-                out = self.feed_forward(self.X_train[pat])
-                train_outputs.append(out)
-
-            train_outputs = np.array(train_outputs).reshape(-1, 1)
-            train_error = np.mean((train_outputs - self.y_train)**2)
-            #print(f"Train MSE: {train_error:.6f}")
-            self.train_errors.append(train_error)
             
-            #Feed-forward all validation paterns
-            if self.X_val.shape[0] > 0:
-                val_outputs = []
-                for pat in range(self.X_val.shape[0]):
-                    out = self.feed_forward(self.X_val[pat])
-                    val_outputs.append(out)
-
-                val_outputs = np.array(val_outputs).reshape(-1, 1)
-                val_error = np.mean((val_outputs - self.y_val)**2)
-                #print(f"Val MSE:   {val_error:.6f}")
-                self.val_errors.append(val_error)
-
-            else:
-                #print("Val MSE:   (sin validación)") 
-                self.val_errors.append(None)
-    
-        # Feed-forward all test patterns
-        test_outputs = []
-        for pat in range(self.X_test.shape[0]):
-            out = self.feed_forward(self.X_test[pat])
-            test_outputs.append(out)
-
-        test_outputs = np.array(test_outputs).reshape(-1, 1)
-
-        # Descale and evaluate
-        self.test_outputs = test_outputs
-        self.test_mse = np.mean((test_outputs - self.y_test)**2)
-
-        print("\n===== RESULTADOS TEST =====")
-        print(f"Test MSE: {self.test_mse:.6f}")
+            train_err = self.calculate_quadratic_error(self.X_train, self.y_train)
+            self.train_errors.append(train_err)
+            
+            if self.perc_validation > 0:
+                val_err = self.calculate_quadratic_error(self.X_val, self.y_val)
+                self.val_errors.append(val_err)
+            
+            print(f"Epoch {epoch}: Train Error={train_err:.4f}, Val Error={val_err:.4f}")
         
-    def predict(self, X):
-        
+    def predict(self, X, y_scaler=None):
         if not isinstance(X, np.ndarray):
             X = np.array(X, dtype=float)
-        return np.array([self.feed_forward(x) for x in X])
+
+        all_scaled_predictions = []
+        
+        # 1. Quitar el DEBUG de producción si la red ya funciona
+        # print("\n--- DEBUGGING DE PREDICT (Por Patrón) ---")
+
+        # Iterar sobre cada patrón de prueba
+        for idx, x in enumerate(X):
+            
+            # 1. Obtener predicción ESCALADA (s)
+            scaled_prediction = self.feed_forward(x) 
+            
+            # --- CORRECCIÓN CLAVE ---
+            # Acceder al primer (y único) elemento [0] para asegurar que se añade un escalar,
+            # no un array de un solo elemento.
+            all_scaled_predictions.append(scaled_prediction[0])
+            
+            # Opcional: imprimir el debug si es necesario
+            # print(f"\nPatrón {idx}:")
+            # print(f"  Input 'x' (primeros 5 features): {x[:5]}")
+            # print(f"  PREDICCIÓN ESCALADA (s): {scaled_prediction[0]}")
+            
+        # Convertir la lista de escalares en un array (N, 1) para el scaler
+        scaled_predictions_array = np.array(all_scaled_predictions).reshape(-1, 1)
+        
+        # 2. Desescalado (Línea 15 del Listing 1)
+        if y_scaler is not None:
+            
+            # Opcional: El warning de estancamiento es útil para la Parte 3
+            if np.allclose(scaled_predictions_array, scaled_predictions_array[0]):
+                warnings.warn("ALERTA: Todas las predicciones ESCALADAS son idénticas.")
+            
+            # Desescalamos a la escala original de log_price
+            final_predictions = y_scaler.inverse_transform(scaled_predictions_array)
+            
+            # Opcional: imprimir el debug final
+            # print("\n--- DEBUGGING DESESCALADO ---")
+            # print(f"MEDIA de predicciones desescaladas: {np.mean(final_predictions):.6f}")
+            # print(f"DESVIACIÓN ESTÁNDAR de predicciones desescaladas: {np.std(final_predictions):.6f}")
+            
+            return final_predictions
+        
+        # Si no se proporciona un scaler, devuelve la predicción escalada
+        return scaled_predictions_array
     
     def loss_epochs(self):
         return np.array(self.train_errors), np.array(self.val_errors)

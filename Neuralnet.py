@@ -1,5 +1,6 @@
 import numpy as np
 import warnings
+from sklearn.preprocessing import StandardScaler
 
 class NeuralNet:
     def __init__(self, layers, epochs, lr, momentum, function, perc_validation):
@@ -145,10 +146,20 @@ class NeuralNet:
         self.d_theta_prev = [dt.copy() for dt in self.d_theta]
 
     def shuffle_data(self, X, y):
+        if hasattr(X, 'values'):
+            X = X.values
+        if hasattr(y, 'values'):
+            y = y.values
+        if y.ndim == 1:
+            y = y.reshape(-1, 1)
+            
         indices = np.random.permutation(X.shape[0])
         return X[indices], y[indices]
 
     def data_division(self, X, y):
+        if y.ndim == 1:
+            y = y.reshape(-1, 1)
+
         n_total = X.shape[0]
         n_test = int(0.20 * n_total)
 
@@ -205,9 +216,6 @@ class NeuralNet:
         for epoch in range(self.epochs):
             for _ in range(num_train):
                 idx = np.random.randint(0, num_train)   # patrón aleatorio
-                #print(f"Pattern idx: {idx}")
-                
-                #print("Pattern")
                 #Choose a random pattern (xu zu) of training set
                 output = self.feed_forward(self.X_train[idx])
                 #print(f"Output {output}")
@@ -227,52 +235,26 @@ class NeuralNet:
             
             print(f"Epoch {epoch}: Train Error={train_err:.4f}, Val Error={val_err:.4f}")
         
-    def predict(self, X, y_scaler=None):
+    def predict(self, X):
         if not isinstance(X, np.ndarray):
             X = np.array(X, dtype=float)
 
         all_scaled_predictions = []
-        
-        # 1. Quitar el DEBUG de producción si la red ya funciona
-        # print("\n--- DEBUGGING DE PREDICT (Por Patrón) ---")
+        X_input = X
 
-        # Iterar sobre cada patrón de prueba
-        for idx, x in enumerate(X):
+        for idx, x in enumerate(X_input):
             
-            # 1. Obtener predicción ESCALADA (s)
             scaled_prediction = self.feed_forward(x) 
-            
-            # --- CORRECCIÓN CLAVE ---
-            # Acceder al primer (y único) elemento [0] para asegurar que se añade un escalar,
-            # no un array de un solo elemento.
             all_scaled_predictions.append(scaled_prediction[0])
             
-            # Opcional: imprimir el debug si es necesario
-            # print(f"\nPatrón {idx}:")
-            # print(f"  Input 'x' (primeros 5 features): {x[:5]}")
-            # print(f"  PREDICCIÓN ESCALADA (s): {scaled_prediction[0]}")
-            
-        # Convertir la lista de escalares en un array (N, 1) para el scaler
         scaled_predictions_array = np.array(all_scaled_predictions).reshape(-1, 1)
         
-        # 2. Desescalado (Línea 15 del Listing 1)
-        if y_scaler is not None:
+        if hasattr(self, 'y_scaler') and isinstance(self.y_scaler, StandardScaler):
             
-            # Opcional: El warning de estancamiento es útil para la Parte 3
-            if np.allclose(scaled_predictions_array, scaled_predictions_array[0]):
-                warnings.warn("ALERTA: Todas las predicciones ESCALADAS son idénticas.")
-            
-            # Desescalamos a la escala original de log_price
-            final_predictions = y_scaler.inverse_transform(scaled_predictions_array)
-            
-            # Opcional: imprimir el debug final
-            # print("\n--- DEBUGGING DESESCALADO ---")
-            # print(f"MEDIA de predicciones desescaladas: {np.mean(final_predictions):.6f}")
-            # print(f"DESVIACIÓN ESTÁNDAR de predicciones desescaladas: {np.std(final_predictions):.6f}")
+            final_predictions = self.y_scaler.inverse_transform(scaled_predictions_array)
             
             return final_predictions
         
-        # Si no se proporciona un scaler, devuelve la predicción escalada
         return scaled_predictions_array
     
     def loss_epochs(self):

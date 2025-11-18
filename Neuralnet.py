@@ -86,17 +86,9 @@ class NeuralNet:
 
     def initialize_w_theta(self):
         for L in range(1, self.L):
-            n_in = self.n[L - 1]  
-            n_out = self.n[L]    
-            
-            # Fórmula de Xavier/Glorot para inicialización uniforme
-            limit = np.sqrt(6.0 / (n_in + n_out))
-            
-            # Inicialización de Pesos (w)
-            self.w[L] = np.random.uniform(low=-limit, high=limit, size=(n_out, n_in))
-            
-            # Inicialización de Umbrales (theta) a cero (práctica común y segura)
-            self.theta[L] = np.zeros(n_out)
+            # Inicializa pesos (w) y umbrales (theta) uniformemente entre -1 y 1.
+            self.w[L] = np.random.uniform(-1.0, 1.0, size=(self.n[L], self.n[L - 1]))
+            self.theta[L] = np.random.uniform(-1.0, 1.0, size=self.n[L])
     
     def feed_forward(self, X):
         self.xi[0] = X

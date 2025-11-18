@@ -130,14 +130,13 @@ class NeuralNet:
                  
     def update_values(self):
         for l in range(1, self.L):
-            dw_gradiente = np.outer(self.delta[l], self.xi[l-1])
-            
-            self.d_w[l] = (-self.lr * dw_gradiente) + (self.momentum * self.d_w_prev[l])
-            
-            self.w[l] += self.d_w[l]
-            
-            self.d_theta[l] = (self.lr * self.delta[l]) + (self.momentum * self.d_theta_prev[l])
-            self.theta[l] += self.d_theta[l]
+            for i in range(0, self.n[l]):
+                self.d_theta[l][i]= (self.lr * self.delta[l][i]) + (self.momentum * self.d_theta_prev[l][i])
+                self.theta[l][i] += self.d_theta[l][i]
+                for j in range(0, self.n[l - 1]):
+                    self.d_w[l][i,j] = -self.lr * self.delta[l][i] * self.xi[l-1][j] + self.momentum * self.d_w_prev[l][i,j]
+                    self.w[l][i,j] += self.d_w[l][i,j]
+
         self.d_w_prev = [dw.copy() for dw in self.d_w]
         self.d_theta_prev = [dt.copy() for dt in self.d_theta]
 
@@ -244,6 +243,12 @@ class NeuralNet:
             all_scaled_predictions.append(scaled_prediction[0])
             
         scaled_predictions_array = np.array(all_scaled_predictions).reshape(-1, 1)
+        
+        if hasattr(self, 'y_scaler') and isinstance(self.y_scaler, StandardScaler):
+            
+            final_predictions = self.y_scaler.inverse_transform(scaled_predictions_array)
+            
+            return final_predictions
         
         return scaled_predictions_array
     

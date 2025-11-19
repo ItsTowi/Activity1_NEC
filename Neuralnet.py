@@ -130,6 +130,7 @@ class NeuralNet:
             
             self.d_theta[l] = (self.lr * self.delta[l]) + (self.momentum * self.d_theta_prev[l])
             self.theta[l] += self.d_theta[l]
+            
         self.d_w_prev = [dw.copy() for dw in self.d_w]
         self.d_theta_prev = [dt.copy() for dt in self.d_theta]
 

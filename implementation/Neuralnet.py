@@ -85,25 +85,29 @@ class NeuralNet:
             raise ValueError(f"Función {self.fact} no soportada")
 
     def initialize_w_theta(self):
-        for L in range(1, self.L):
-            n_in = self.n[L - 1]  
-            n_out = self.n[L]    
+        
+        if self.fact != "relu":
+            np.random.seed(42) # Para reproducibilidad
+            for L in range(1, self.L):
+                # Inicialización de Xavier / Glorot (mucho mejor que -1 a 1)
+                limit = np.sqrt(6 / (self.n[L] + self.n[L - 1]))
+                self.w[L] = np.random.uniform(-limit, limit, size=(self.n[L], self.n[L - 1]))
+                self.theta[L] = np.zeros(self.n[L]) # Los bias/theta suelen iniciarse en 0
+        else:
+            for L in range(1, self.L):
+                # Formula: sqrt(6 / n_in) 
+                # NOTA: Solo dividimos por la capa anterior (n_in), ignoramos la actual.
+                limit = np.sqrt(6 / self.n[L - 1])
+                
+                self.w[L] = np.random.uniform(-limit, limit, size=(self.n[L], self.n[L - 1]))
+                self.theta[L] = np.zeros(self.n[L])
             
-            # Fórmula de Xavier/Glorot para inicialización uniforme
-            limit = np.sqrt(6.0 / (n_in + n_out))
             
-            # Inicialización de Pesos (w)
-            self.w[L] = np.random.uniform(low=-limit, high=limit, size=(n_out, n_in))
-            
-            # Inicialización de Umbrales (theta) a cero (práctica común y segura)
-            self.theta[L] = np.zeros(n_out)
-    
     def feed_forward(self, X):
         self.xi[0] = X
         for L in range(1, self.L):
             # h[L] = w[L] * xi[L-1] - theta[L]
             self.h[L] = self.w[L].dot(self.xi[L-1]) - self.theta[L]
-
             # xi[L] = f(h[L])
             self.xi[L] = self._activation(self.h[L])
 
@@ -130,13 +134,15 @@ class NeuralNet:
                  
     def update_values(self):
         for l in range(1, self.L):
-            for i in range(0, self.n[l]):
-                self.d_theta[l][i]= (self.lr * self.delta[l][i]) + (self.momentum * self.d_theta_prev[l][i])
-                self.theta[l][i] += self.d_theta[l][i]
-                for j in range(0, self.n[l - 1]):
-                    self.d_w[l][i,j] = -self.lr * self.delta[l][i] * self.xi[l-1][j] + self.momentum * self.d_w_prev[l][i,j]
-                    self.w[l][i,j] += self.d_w[l][i,j]
-
+            dw_gradiente = np.outer(self.delta[l], self.xi[l-1])
+            
+            self.d_w[l] = (-self.lr * dw_gradiente) + (self.momentum * self.d_w_prev[l])
+            
+            self.w[l] += self.d_w[l]
+            
+            self.d_theta[l] = (self.lr * self.delta[l]) + (self.momentum * self.d_theta_prev[l])
+            self.theta[l] += self.d_theta[l]
+            
         self.d_w_prev = [dw.copy() for dw in self.d_w]
         self.d_theta_prev = [dt.copy() for dt in self.d_theta]
 
@@ -189,16 +195,13 @@ class NeuralNet:
         for mu in range(num_patterns):
             x_mu = X_set[mu]
             z_mu = y_set[mu]
-
-            # 1. Feed-forward: Obtener la predicción o(x^mu)
             o_mu = self.feed_forward(x_mu)
 
             squared_difference = (o_mu - z_mu)**2
-            pattern_error_sum = np.sum(squared_difference) 
-            
-            total_error += pattern_error_sum
+            total_error += np.sum(squared_difference)
 
-        return 0.5 * total_error
+        # CORRECCIÓN: Dividir por num_patterns para obtener el PROMEDIO
+        return (0.5 * total_error) / num_patterns
     
     def fit(self,X,y):
         
@@ -208,12 +211,14 @@ class NeuralNet:
         num_train = self.X_train.shape[0]
         val_err = np.nan
         
+        num_train = self.X_train.shape[0]
+        indices = np.arange(num_train)
+        
         for epoch in range(self.epochs):
-            for _ in range(num_train):
-                idx = np.random.randint(0, num_train)   # patrón aleatorio
+            for i in range(num_train):
+                idx = indices[i]   # patrón aleatorio
                 #Choose a random pattern (xu zu) of training set
                 output = self.feed_forward(self.X_train[idx])
-                #print(f"Output {output}")
                 
                 #Back-propagate the error for this pattern
                 self.error_back_propagation(output, self.y_train[idx])
@@ -243,12 +248,6 @@ class NeuralNet:
             all_scaled_predictions.append(scaled_prediction[0])
             
         scaled_predictions_array = np.array(all_scaled_predictions).reshape(-1, 1)
-        
-        if hasattr(self, 'y_scaler') and isinstance(self.y_scaler, StandardScaler):
-            
-            final_predictions = self.y_scaler.inverse_transform(scaled_predictions_array)
-            
-            return final_predictions
         
         return scaled_predictions_array
     
